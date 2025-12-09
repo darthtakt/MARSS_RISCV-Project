@@ -1,4 +1,4 @@
-# MARSS_RISCV-Project
+# MARSS-RISCV-Project
 Implementing a Custom Instruction in RISCV using MARSS-RISCV Simulator
 
 The RISCV architecture is renowned for its modular design and extensibility, allowing
