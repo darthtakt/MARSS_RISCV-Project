@@ -1,9 +1,9 @@
 mod instructions editing 
 toolchain editing 
-MATCH_MOD - 0X0200006B
-MASK_MOD - 0Xfe00707f
-opcode = 0X1101011
-funct7=0X02
+MATCH_MOD - 0x0200006B
+MASK_MOD - 0xfe00707f
+opcode = 0x1101011
+funct7=0x02
 funct3=0x00
 
 
