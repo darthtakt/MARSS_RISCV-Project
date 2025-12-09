@@ -1,0 +1,258 @@
+mod instructions editing 
+toolchain editing 
+MATCH_MOD - 0X0200006B
+MASK_MOD - 0Xfe00707f
+opcode = 0X1101011
+funct7=0X02
+funct3=0x00
+
+
+decode.c file 
+
+1. to perform mul on mod test operation 
+
+static void set_op_fu(RVInstruction *i)
+{
+    uint32_t funct3;
+    uint32_t insn = i->binary;
+    int32_t imm = insn >> 25;  // funct7 bits
+
+    if (imm == 1) {
+        funct3 = (insn >> 12) & 7;
+        switch (funct3) {
+            case 0: /* mul */
+            case 1: /* mulh */
+            case 2: /* mulhsu */
+            case 3: /* mulhu */
+                i->fu_type = FU_MUL;
+                i->type = INS_TYPE_INT_MUL;
+                break;
+            case 4: /* div */
+            case 5: /* divu */
+            case 6: /* rem */
+            case 7: /* remu */
+                i->fu_type = FU_DIV;
+                i->type = INS_TYPE_INT_DIV;
+                break;
+        }
+    }
+    else if (imm == 2) { // Your custom funct7 == 2 // im=funct7 =2 fro our opcode 
+        funct3 = (insn >> 12) & 7; //extracting the function 3 again
+        if (funct3 == 0) { // funct3 == 0 for your MOD
+            i->fu_type = FU_MUL;           // reuse div unit
+            i->type = INS_TYPE_INT_MUL;  // reuse div type, or define a new type
+            fprintf(stderr,"done");  
+            // Optionally: set a flag like i->is_custom_mod = TRUE;
+        }
+        // else leave undecoded or handle other cases if needed
+    }
+    // else other cases remain untouched
+}
+
+
+
+2. for actual mod operation
+
+
+static void set_op_fu(RVInstruction *i)
+{
+    uint32_t funct3;
+    uint32_t insn = i->binary;
+    int32_t imm = insn >> 25;  // funct7 bits
+
+    if (imm == 1) {
+        funct3 = (insn >> 12) & 7;
+        switch (funct3) {
+            case 0: /* mul */
+            case 1: /* mulh */
+            case 2: /* mulhsu */
+            case 3: /* mulhu */
+                i->fu_type = FU_MUL;
+                i->type = INS_TYPE_INT_MUL;
+                break;
+            case 4: /* div */
+            case 5: /* divu */
+            case 6: /* rem */
+            case 7: /* remu */
+                i->fu_type = FU_DIV;
+                i->type = INS_TYPE_INT_DIV;
+                break;
+        }
+    }
+    else if (imm == 2) { // Your custom funct7 == 2 // im=funct7 =2 fro our opcode 
+        funct3 = (insn >> 12) & 7; //extracting the function 3 again
+        if (funct3 == 0) { // funct3 == 0 for your MOD
+            i->fu_type = FU_DIV;           // reuse div unit
+            i->type = INS_TYPE_INT_DIV;    // reuse div type, or define a new type
+            // Optionally: set a flag like i->is_custom_mod = TRUE;
+        }
+        // else leave undecoded or handle other cases if needed
+    }
+    // else other cases remain untouched
+}
+
+
+3. exception check block in order to allow imm==2 instructions 
+
+ static int chk_op_exceptions(RVInstruction *i)
+{
+    int32_t imm = i->binary >> 25;      // Extract funct7 field (bits 31:25)
+    uint32_t funct3 = (i->binary >> 12) & 7;  // Extract funct3 field (bits 14:12)
+
+    // Allow:
+    // - Standard M-extension instructions with funct7 == 1
+    // - Your custom MOD instruction with funct7 == 2 and funct3 == 0
+    if (imm != 1 && !(imm == 2 && funct3 == 0))
+    {
+        fprintf(stderr, "exception done");
+        if (imm & ~0x20)  
+        {// If any bits other than bit 5 are set in funct7, reject
+            return -1;    // Signal an illegal instruction exception
+        }
+    return 0;  // Instruction passes the check (no exception)
+    
+      }
+
+
+
+
+
+FURTHER EDITING OF DECODE.C
+
+
+void
+decode_riscv_binary(struct RVInstruction *ins, uint32_t insn)
+
+{
+    ins->binary = insn;
+    ins->fu_type = FU_ALU;
+    ins->data_class = INS_CLASS_INT;
+    ins->type = INS_TYPE_ARITMETIC;
+    if ((ins->binary & 3) != 3)  /*checks fo last 2 bits of the 32-bit id if its not 11 ie compressed it calls the function decode compressed to handle it */
+    {
+        /* Compressed Instruction */
+        decode_compressed_type(ins);
+    }
+    else
+    {
+        /* 32-bit Instruction */
+        ins->major_opcode = insn & 0x7f;
+        ins->funct3 = (insn >> 12) & 7;
+        ins->funct7 = (ins->binary & 0xfe000000) >> 25;
+        ins->rd = (insn >> 7) & 0x1f;
+        ins->rs1 = (insn >> 15) & 0x1f;
+        ins->rs2 = (insn >> 20) & 0x1f;
+
+
+/* ins is a pointer to a struct of type rvinstruction. it is a local variable name (the function parameter) pointing to memory where decoded results will be stored.
+
+insn is a local variable (also a function parameter) of type uint32_t, representing the 32-bit raw instruction fetched from memory—the source binary instruction to decode.
+    
+ Inside the function: You decode fields from the 32-bit insn value and write them into the struct pointed to by ins (so all accesses like ins->binary, ins->major_opcode, etc., refer to fields within the RVInstruction struct).
+ 
+What the Function Does
+
+    The function (decode_riscv_binary) is designed to decode the various fields of a 32-bit RISC-V instruction.
+
+    The 32-bit instruction word (ID) is fetched from memory elsewhere, and it's passed into this function as the variable insn (of type uint32_t).
+
+The Purpose of the Pointer ins
+
+    The function's first parameter, struct RVInstruction *ins, is a pointer to a struct RVInstruction—that is, a pointer pointing at a pre-existing instance of the struct (allocated by the calling code).
+
+    The function uses the pointer ins to fill in (or "populate") the various fields of the struct (like binary, major_opcode, rd, etc.) by dereferencing the pointer (ins->field).*/
+    
+    
+  
+  
+  from riscv_sim_macros.h file 
+  #define OP_MASK 0x33   /* r-type instruction opcode */
+#define OP_MASK_32 0x3b  /* RVI 64 bit instrucions r-type instructiuon opcode*/
+  
+  switch (ins->major_opcode)
+ 
+ case OP_MASK:
+case OP_MASK_32:
+{
+    if (chk_op_exceptions(ins))    /* already edited before*/
+    {
+        goto exception;
+    }
+
+    ins->has_src1 = TRUE;
+    ins->has_src2 = TRUE;
+    ins->has_dest = TRUE;
+    /* set the functional units for mul and div */
+    set_op_fu(ins);       /*already edited before*/
+    ...
+}
+
+/*Here it is selecting based on the major_opcode instance in struct RV which contains the 7 bit opcode extracted in the decode
+OP_MASK macro is sort of a label whoes hex or 32 bit word(id) is defined in the macros file as #define OP_MASK 0x33 this hex is of r-type instruction 
+for our custom case when can define our own macro as OP_MOD_MASK 0X6B as in this file only opcodes are defined not ID. */
+
+
+1. 1st method 
+switch (ins->major_opcode)
+{
+    case OP_MASK:
+    case OP_MASK_32:
+    case OP_MOD_MASK:    /* this is the label that identifies our opcode hex here based of defined macro (OP_MOD_MASK 0X6B)*/
+    {
+        if (chk_op_exceptions(ins))
+        {
+            goto exception;
+        }
+
+        ins->has_src1 = TRUE;
+        ins->has_src2 = TRUE;
+        ins->has_dest = TRUE;
+        /* set the functional units for mul and div */
+        set_op_fu(ins);
+    }
+}
+
+
+
+2nd method 
+switch (ins->major_opcode)
+{
+    case OP_MASK:
+    case OP_MASK_32:
+    case 0X6B             /* selecting only on the basis of mod opcode as that is the condition for switch case */
+    {
+        if (chk_op_exceptions(ins))
+        {
+            goto exception;
+        }
+
+        ins->has_src1 = TRUE;
+        ins->has_src2 = TRUE;
+        ins->has_dest = TRUE;
+        /* set the functional units for mul and div */
+        set_op_fu(ins);
+         if(ins->major_opcode == 0x6B)
+                { 
+                        fprintf(stderr, "mod checked");
+                }
+
+    }
+}
+
+
+/*riscv_isa_string_generator*/
+
+else if (imm == 2) // Custom MOD instruction
+{
+    funct3 = (insn >> 12) & 7;
+    switch (funct3)
+    {
+        case 0: /* mod */
+        {
+            snprintf(i->str, RISCV_INS_STR_MAX_LENGTH, "mod %s,%s,%s",
+                     reg[i->rd], reg[i->rs1], reg[i->rs2]);
+            break;
+        }
+    }
+}
+
